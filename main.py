@@ -16,6 +16,8 @@ title_data_index = '数据列/行号'
 title_is_horizontal_or_vertical = '横表/竖表'
 
 output_filename = 'total.xlsx'
+error_filename = '错误日志.txt'
+error_list = []
 
 title_list = [
     title_author,
@@ -41,6 +43,11 @@ script_path = os.path.abspath(__file__)
 base_dir = os.path.dirname(script_path)
 
 
+def standardize_index(index_row_dict, get_max):
+    return max(int(index_row_dict[title_start_at]), 1), \
+           min(int(index_row_dict[title_end_at]), get_max())
+
+
 def assemble_data_list_item(field, data, index_dict):
     return [
         index_dict[title_indicator_name],  # 数据指标名称
@@ -54,7 +61,7 @@ def assemble_data_list_item(field, data, index_dict):
 def validate_index_file_parameters(headers, index_filename):
     for title_str in title_list:
         if title_str not in headers:
-            raise ValueError(f'索引文件"{index_filename}"中缺失必要参数："{title_str}"，请检查。')
+            error_list.append(f'索引文件"{index_filename}"中缺失必要参数："{title_str}"，请检查。')
 
 
 # 定义一个解析数据文件的函数
@@ -62,6 +69,8 @@ def parse_data_file(file_path, index_row_dict):
     sub_data_list = []
     print(f'开始处理文件{file_path}...')
     _, extension = os.path.splitext(file_path)
+    field_index = int(index_row_dict[title_field_index])
+    data_index = int(index_row_dict[title_data_index])
     if extension == '.xlsx':
         print('文件是xlsx格式，使用新excel的解析方式...请稍后...')
         workbook = load_workbook(file_path)
@@ -70,31 +79,28 @@ def parse_data_file(file_path, index_row_dict):
             else workbook.worksheets[0]
         print(f'文件加载成功，当前操作的sheet页为{sheet.title}')
         if index_row_dict[title_is_horizontal_or_vertical] == '横表':
+            start_at, end_at = standardize_index(index_row_dict, lambda: sheet.max_column)
             print(f'以"{index_row_dict[title_is_horizontal_or_vertical]}"'
-                  f'的方式解析当前sheet页的第{int(index_row_dict[title_start_at])}'
-                  f'列至第{int(index_row_dict[title_end_at])}列...')
-
-            for col in sheet.iter_cols(min_col=max(int(index_row_dict[title_start_at]), sheet.min_column),
-                                       max_col=min(int(index_row_dict[title_end_at]), sheet.max_column)):
-                print(f'开始解析第{col[0].column}列...')
-                item = assemble_data_list_item(col[int(index_row_dict[title_field_index]) - 1].value,
-                                               col[int(index_row_dict[title_data_index]) - 1].value,
+                  f'的方式解析当前sheet页的第{start_at}列至第{end_at}列...')
+            for col in range(start_at, end_at + 1):
+                print(f'开始解析第{col}列...')
+                item = assemble_data_list_item(sheet.cell(field_index, col).value,
+                                               sheet.cell(data_index, col).value,
                                                index_row_dict)
                 sub_data_list.append(item)
-                print(f'第{col[0].column}列解析完毕！, 数据为：{item}')
+                print(f'第{col}列解析完毕！, 数据为：{item}')
         elif index_row_dict[title_is_horizontal_or_vertical] == '竖表':
+            start_at, end_at = standardize_index(index_row_dict, lambda: sheet.max_row)
             print(f'以"{index_row_dict[title_is_horizontal_or_vertical]}"'
-                  f'的方式解析当前sheet页的第{int(index_row_dict[title_start_at])}'
-                  f'行至第{int(index_row_dict[title_end_at])}行...')
-            # todo 待测试
-            for row in sheet.iter_rows(min_col=max(int(index_row_dict[title_start_at]), sheet.min_row),
-                                       max_col=min(int(index_row_dict[title_end_at]), sheet.max_row)):
-                print(f'开始解析第{row[0].column}行...')
-                item = assemble_data_list_item(row[int(index_row_dict[title_field_index]) - 1].value,
-                                               row[int(index_row_dict[title_data_index]) - 1].value,
+                  f'的方式解析当前sheet页的第{start_at}行至第{end_at}行...')
+            for row in range(start_at, end_at + 1): # sheet.iter_rows(min_col=start_at, max_col=end_at):
+                print(f'开始解析第{row}行...')
+                # sheet[]
+                item = assemble_data_list_item(sheet.cell(row, field_index).value,
+                                               sheet.cell(row, data_index).value,
                                                index_row_dict)
                 sub_data_list.append(item)
-                print(f'第{row[0].column}行解析完毕！, 数据为：{item}')
+                print(f'第{row}行解析完毕！, 数据为：{item}')
 
     elif extension == '.xls':
         print('文件是xls格式，使用旧excel的解析方式...请稍后...')
@@ -105,27 +111,27 @@ def parse_data_file(file_path, index_row_dict):
         print(f'文件加载成功，当前操作的sheet页为{sheet.name}')
 
         if index_row_dict[title_is_horizontal_or_vertical] == '横表':
+            start_at, end_at = standardize_index(index_row_dict, lambda: sheet.ncols)
             print(f'以"{index_row_dict[title_is_horizontal_or_vertical]}"'
-                  f'的方式解析当前sheet页的第{int(index_row_dict[title_start_at])}'
-                  f'列至第{int(index_row_dict[title_end_at])}列...')
-            for col in range(int(index_row_dict[title_start_at]) - 1, int(index_row_dict[title_end_at])):
-                print(f'开始解析第{col + 1}列...')
-                item = assemble_data_list_item(sheet.cell(int(index_row_dict[title_field_index]) - 1, col).value,
-                                               sheet.cell(int(index_row_dict[title_data_index]) - 1, col).value,
+                  f'的方式解析当前sheet页的第{start_at}列至第{end_at}列...')
+            for col in range(start_at, end_at + 1):
+                print(f'开始解析第{col}列...')
+                item = assemble_data_list_item(sheet.cell_value(field_index - 1, col - 1),
+                                               sheet.cell_value(data_index - 1, col - 1),
                                                index_row_dict)
                 sub_data_list.append(item)
-                print(f'第{col + 1}列解析完毕！, 数据为：{item}')
+                print(f'第{col}列解析完毕！, 数据为：{item}')
         elif index_row_dict[title_is_horizontal_or_vertical] == '竖表':
+            start_at, end_at = standardize_index(index_row_dict, lambda: sheet.nrows)
             print(f'以"{index_row_dict[title_is_horizontal_or_vertical]}"'
-                  f'的方式解析当前sheet页的第{int(index_row_dict[title_start_at])}'
-                  f'行至第{int(index_row_dict[title_end_at])}行...')
-            for row in range(int(index_row_dict[title_start_at]) - 1, int(index_row_dict[title_end_at])):
-                print(f'开始解析第{row + 1}行...')
-                item = assemble_data_list_item(sheet.cell(row, int(index_row_dict[title_field_index]) - 1).value,
-                                               sheet.cell(row, int(index_row_dict[title_data_index]) - 1).value,
+                  f'的方式解析当前sheet页的第{start_at}行至第{end_at}行...')
+            for row in range(start_at, end_at + 1):
+                print(f'开始解析第{row}行...')
+                item = assemble_data_list_item(sheet.cell_value(row - 1, field_index - 1),
+                                               sheet.cell_value(row - 1, data_index - 1),
                                                index_row_dict)
                 sub_data_list.append(item)
-                print(f'第{row + 1}行解析完毕！, 数据为：{item}')
+                print(f'第{row}行解析完毕！, 数据为：{item}')
     else:
         print(f'\n错误！！！ === 输入的文件" {file_path} "不是一个标准的excel，请使用.xls或者.xlsx文件 === ', end='\n\n')
     return sub_data_list
@@ -142,6 +148,7 @@ def parse_index_file(index_filename):
         headers = [cell.value for cell in sheet[0]]
         validate_index_file_parameters(headers, index_filename)
         for row in sheet.iter_rows(min_row=2, values_only=True):
+            sheet.cell()
             index_row_dict = {headers[i]: row[i] for i in range(len(headers))}
             if title_file_path not in index_row_dict:
                 raise ValueError(f'{index_filename}中不存在名为{title_file_path}的列，无法找到对应的数据文件！')
@@ -181,7 +188,6 @@ def main():
 
     # 解析索引文件
     parse_index_file(index_filename)
-    print(data_list)
     write_to_output_file()
 
 
