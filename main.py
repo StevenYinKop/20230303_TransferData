@@ -1,4 +1,5 @@
 import os
+import sys
 
 from openpyxl import load_workbook, Workbook
 from xlrd import open_workbook
@@ -15,9 +16,13 @@ title_field_index = '字段名称列/行号'
 title_data_index = '数据列/行号'
 title_is_horizontal_or_vertical = '横表/竖表'
 
-output_filename = 'total.xlsx'
-error_filename = '错误日志.txt'
+script_path = os.path.abspath(__file__)
+base_dir = f'{os.path.dirname(script_path)}{os.sep}工作目录'
+
+output_filename = f'{base_dir}{os.sep}total.xlsx'
+error_filename = f'{base_dir}{os.sep}错误日志.txt'
 error_list = []
+error_index_count = 0
 
 title_list = [
     title_author,
@@ -39,8 +44,22 @@ data_list = [
      '数据年度',
      '数据']
 ]
-script_path = os.path.abspath(__file__)
-base_dir = os.path.dirname(script_path)
+
+
+def get_format_error_cell(error_str, row_number):
+    return f'[-----第{row_number}行-----]：{error_str}'
+
+
+def output_error_list():
+    if len(error_list) == 0:
+        return
+    error_file = open(error_filename, 'w')
+    for error_item in error_list:
+        error_file.write(f'{error_item}\n')
+    print(f"程序执行过程中发现错误，请查看{error_filename}")
+    error_file.close()
+    sys.exit()
+    # exit()
 
 
 def standardize_index(index_row_dict, get_max):
@@ -59,9 +78,44 @@ def assemble_data_list_item(field, data, index_dict):
 
 # 校验索引文件的格式, 防止索引文件中，输入的数据质量差，使程序崩溃
 def validate_index_file_parameters(headers, index_filename):
+    print(f'正在检查索引文件"{index_filename}"中的数据有效性...')
     for title_str in title_list:
         if title_str not in headers:
-            error_list.append(f'索引文件"{index_filename}"中缺失必要参数："{title_str}"，请检查。')
+            error_list.append(f'索引文件"{index_filename}"中缺失必要参数列："{title_str}"，请检查。')
+    output_error_list()
+
+
+def validate_index_data(index_dict, row):
+    error_sub_list = []
+    for title_str in [title_year, title_start_at, title_end_at, title_data_index, title_field_index]:
+        try:
+            int(float((index_dict[title_str])))
+        except ValueError:
+            error_sub_list.append(get_format_error_cell(f' "{title_str}" 不是一个数字格式，无法解析！', row))
+    if index_dict[title_is_horizontal_or_vertical] not in ['横表', '竖表']:
+        error_sub_list.append(get_format_error_cell(f' "{title_is_horizontal_or_vertical}"中只能填"横表"或者"竖表"！', row))
+    if not os.path.exists(f'{base_dir}{os.sep}{str(index_dict[title_file_path])}'):
+        error_sub_list.append(get_format_error_cell(f' "{title_file_path}" 文件不存在，无法解析！', row))
+    else:
+        file_path = f'{base_dir}{os.sep}{str(index_dict[title_file_path])}'
+        _, extension = os.path.splitext(file_path)
+        if extension == '.xlsx':
+            workbook = load_workbook(file_path)
+            if index_dict[title_sheet_name] not in workbook.sheetnames and index_dict[title_sheet_name] is not None:
+                error_sub_list.append(
+                    get_format_error_cell(f'{title_file_path}文件中不存在名为{index_dict[title_sheet_name]}的Sheet页，无法解析！', row))
+            workbook.close()
+        elif extension == '.xls':
+            workbook = open_workbook(file_path)
+            if index_dict[title_sheet_name] not in workbook.sheet_names() and str(index_dict[title_sheet_name]) not in [
+                'None', '']:
+                error_sub_list.append(
+                    get_format_error_cell(f'{title_file_path}文件中不存在名为{index_dict[title_sheet_name]}的Sheet页，无法解析！', row))
+            workbook.release_resources()
+    if len(error_sub_list) != 0:
+        error_sub_list.append(get_format_error_cell(f'跳过第{row}行...\n', row))
+    error_list.extend(error_sub_list)
+    return len(error_sub_list) == 0
 
 
 # 定义一个解析数据文件的函数
@@ -93,7 +147,7 @@ def parse_data_file(file_path, index_row_dict):
             start_at, end_at = standardize_index(index_row_dict, lambda: sheet.max_row)
             print(f'以"{index_row_dict[title_is_horizontal_or_vertical]}"'
                   f'的方式解析当前sheet页的第{start_at}行至第{end_at}行...')
-            for row in range(start_at, end_at + 1): # sheet.iter_rows(min_col=start_at, max_col=end_at):
+            for row in range(start_at, end_at + 1):  # sheet.iter_rows(min_col=start_at, max_col=end_at):
                 print(f'开始解析第{row}行...')
                 # sheet[]
                 item = assemble_data_list_item(sheet.cell(row, field_index).value,
@@ -145,14 +199,13 @@ def parse_index_file(index_filename):
     if extension == '.xlsx':
         workbook = load_workbook(index_filename)
         sheet = workbook.active
-        headers = [cell.value for cell in sheet[0]]
+        headers = [cell.value for cell in sheet[1]]
         validate_index_file_parameters(headers, index_filename)
-        for row in sheet.iter_rows(min_row=2, values_only=True):
-            sheet.cell()
-            index_row_dict = {headers[i]: row[i] for i in range(len(headers))}
-            if title_file_path not in index_row_dict:
-                raise ValueError(f'{index_filename}中不存在名为{title_file_path}的列，无法找到对应的数据文件！')
-            data_list.extend(parse_data_file(f'{base_dir}/{index_row_dict[title_file_path]}', index_row_dict))
+        for row in sheet.iter_rows(min_row=2):
+            index_row_dict = {headers[i]: row[i].value for i in range(len(headers))}
+            if validate_index_data(index_row_dict, row[0].row):
+                data_list.extend(
+                    parse_data_file(f'{base_dir}{os.sep}{index_row_dict[title_file_path]}', index_row_dict))
 
     # 如果是xls后缀名的文件，走以下逻辑
     elif extension == '.xls':
@@ -162,10 +215,9 @@ def parse_index_file(index_filename):
         validate_index_file_parameters(headers, index_filename)
         for row in range(1, sheet.nrows):
             index_row_dict = {headers[i]: sheet.cell_value(row, i) for i in range(len(headers))}
-            if title_file_path not in index_row_dict:
-                raise ValueError(f'{index_filename}中不存在名为{title_file_path}的列，无法找到对应的数据文件！')
-            data_list.extend(parse_data_file(f'{base_dir}/{index_row_dict[title_file_path]}', index_row_dict))
-
+            if validate_index_data(index_row_dict, row):
+                data_list.extend(
+                    parse_data_file(f'{base_dir}{os.sep}{index_row_dict[title_file_path]}', index_row_dict))
 
     # 如果既不是xls后缀名，也不是xlsx后缀名，说明输入的索引文件有问题。
     else:
@@ -178,18 +230,43 @@ def write_to_output_file():
     for id_r, item in enumerate(data_list):
         for id_c, value in enumerate(item):
             sheet_total.cell(id_r + 1, id_c + 1, value)
-    workbook_total.save(f'{base_dir}/total.xlsx')
+            print(value, end='\t')
+        print()
+    workbook_total.save(output_filename)
+    if len(data_list) > 1:
+        print(f'数据全部处理完毕，写入文件： {output_filename}')
+        workbook_total.close()
+    print(f'共写入数据{len(data_list) - 1}条！')
 
 
 # 定义python的入口文件，代码从此处开始运行⬇️
 def main():
     # 获得索引文件
-    index_filename = 'index.xls'
-
-    # 解析索引文件
-    parse_index_file(index_filename)
-    write_to_output_file()
+    global base_dir
+    global output_filename
+    global error_filename
+    default_index_filename = f'{base_dir}{os.sep}index.xls'
+    print("欢迎使用数据迁移程序！")
+    index_filename = input(f'请输入索引文件的路径，按回车键确认(默认路径为：{default_index_filename}):\n')
+    if index_filename == '':
+        index_filename = default_index_filename
+    base_dir = f'{os.path.dirname(index_filename)}{os.sep}'
+    output_filename = f'{base_dir}{os.sep}total.xlsx'
+    error_filename = f'{base_dir}{os.sep}错误日志.txt'
+    input(f'请将所有的数据文件，放置在"{base_dir}"文件夹下，按回车键确认\n')
+    if os.path.exists(index_filename):
+        # 解析索引文件
+        parse_index_file(index_filename)
+        write_to_output_file()
+        output_error_list()
+    else:
+        print(f'找不到"{index_filename}"，请检查文件是否存在！')
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception as e:
+        print(e)
+    finally:
+        input("按下任意键结束程序...")
