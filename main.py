@@ -39,10 +39,12 @@ title_list = [
 
 # 声明一个结果集，后续的结果都会存在这个列表中
 data_list = [
-    ['数据指标名称',
-     '字段名称',
-     '数据年度',
-     '数据']
+    [
+        '数据采集人',
+        '数据指标名称',
+        '字段名称',
+        '数据年度',
+        '数据']
 ]
 
 
@@ -69,6 +71,7 @@ def standardize_index(index_row_dict, get_max):
 
 def assemble_data_list_item(field, data, index_dict):
     return [
+        index_dict[title_author], # 数据采集人
         index_dict[title_indicator_name],  # 数据指标名称
         str(field),  # 字段名称
         int(index_dict[title_year]),  # 数据年度
@@ -90,7 +93,7 @@ def validate_index_data(index_dict, row):
     for title_str in [title_year, title_start_at, title_end_at, title_data_index, title_field_index]:
         try:
             int(float((index_dict[title_str])))
-        except ValueError:
+        except Exception as e:
             error_sub_list.append(get_format_error_cell(f' "{title_str}" 不是一个数字格式，无法解析！', row))
     if index_dict[title_is_horizontal_or_vertical] not in ['横表', '竖表']:
         error_sub_list.append(get_format_error_cell(f' "{title_is_horizontal_or_vertical}"中只能填"横表"或者"竖表"！', row))
