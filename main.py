@@ -295,6 +295,10 @@ def main():
         index_filename = default_index_filename
     base_dir = f'{os.path.dirname(index_filename)}{os.sep}'
     output_filename = f'{base_dir}{os.sep}total.xlsx'
+    output_filename_count = 1
+    while os.path.exists(output_filename):
+        output_filename = f'{base_dir}{os.sep}total({output_filename_count}).xlsx'
+        output_filename_count += 1
     error_filename = f'{base_dir}{os.sep}错误日志.txt'
     input(f'请将所有的数据文件，放置在"{base_dir}"文件夹下，按回车键确认\n')
     # 只有当输入的索引文件真实存在，才会进入到解析逻辑，否则直接报错并且程序结束
