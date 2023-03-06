@@ -296,6 +296,7 @@ def main():
     base_dir = f'{os.path.dirname(index_filename)}{os.sep}'
     output_filename = f'{base_dir}{os.sep}total.xlsx'
     output_filename_count = 1
+    # 判断文件是否重名，如果存在重名文件，则在文件名后面加上序号
     while os.path.exists(output_filename):
         output_filename = f'{base_dir}{os.sep}total({output_filename_count}).xlsx'
         output_filename_count += 1
