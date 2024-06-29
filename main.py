@@ -6,7 +6,7 @@ from openpyxl import load_workbook, Workbook
 from xlrd import open_workbook
 
 # 定义标题名称
-title_author = '数据采集作者'
+title_author = '数据采集作者666'
 title_file_path = '数据文件名称'
 title_sheet_name = 'Sheet页名称(默认为第一页）'
 title_indicator_name = '采集指标名称'
